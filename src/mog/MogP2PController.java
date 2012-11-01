@@ -71,6 +71,10 @@ public class MogP2PController {
     //IP de um peer pré-conhecido
     private String peer_inicial = "localhost";
     
+    //Lista de pesquisas ativas
+    private final HashMap<String,ArrayList<PingsListNode>> pesquisas_ativas = 
+            new HashMap<String,ArrayList<PingsListNode>>();
+    
     
     public MogP2PController(){
         
@@ -80,16 +84,24 @@ public class MogP2PController {
         this.peer_inicial = peer_inicial;
     }
     
-    
-    Runnable starter;
     public void iniciar(){
+        System.out.println("Entrou em iniciar()");
+        
+        boolean exit = false;
         
         //estabelecer uma conexão (socket) com o peer inicial pré conhecido
         Socket default_peer_socket = null;
         try{
             default_peer_socket = new Socket(peer_inicial, mog_port);
         }
-        catch(Exception e) {return;}
+        catch(Exception e) {exit = true;}
+        
+        //criar mecanismo de escuta por qualquer mensagem remota
+        new Thread(new ThreadAceitaConexoes()).start();
+        
+        if(exit) {
+            return;
+        }
         
         //enviar ao peer inicial uma mensagem do tipo ENTRADA
         OutputStream buffer_out = null;
@@ -97,11 +109,6 @@ public class MogP2PController {
             buffer_out = default_peer_socket.getOutputStream();
         }
         catch(Exception e) {}
-        /**
-        PrintWriter msg_buffer_out = null;
-        msg_buffer_out = new PrintWriter(buffer_out, true);
-        msg_buffer_out.println(MSG_ENTR+ARQ_NULO);
-        /**/
         enviarMsg(MSG_ENTR, null, ARQ_NULO, buffer_out);
         
         //Recebendo tabela
@@ -120,100 +127,99 @@ public class MogP2PController {
             //guardando temporariamente a tabela serializada
             dtabuffer_in.readFully(tblainic_s);
         }
-        catch (IOException ex) {}
+        catch (IOException ex) {System.out.println("Problema ao receber tabela inicial");}
         //deserializar tabela recebida (obtendo-a encapsulada)
         TabelaEncaps tblainic_e = (TabelaEncaps) deserialize(tblainic_s);
         //Guardando tabela
         peerspesq.addAll(tblainic_e.getTabela());
-        
-        //criar mecanismo de escuta por qualquer mensagem remota
-        
     }
     
-    class TabelaEncaps implements Serializable{
-        private ArrayList<String> tabela;
-
-        public TabelaEncaps(ArrayList<String> tabela) {
-            this.tabela = tabela;
+    public void pesquisar(final String termobusca){
+        System.out.println("Entrou em pesquisar(\""+termobusca+"\")");
+        //Enviando uma mensagem de pesquisa para cada peer na tabela de pesquisa
+        for(String peer:peerspesq){
+            //new Thread(new EnvioMsg(MSG_PESQ, termobusca, peer)).start();
+            enviarMsg(MSG_PESQ, peer, termobusca, null);
         }
         
-        public ArrayList<String> getTabela() {
-            return tabela;
+        //Adicionando essa pesquisa ao mapa de pesquisas
+        synchronized(pesquisas_ativas){
+            ArrayList<PingsListNode> pings_pesquisa;
+            pings_pesquisa = new ArrayList<PingsListNode>();
+            pesquisas_ativas.put(termobusca, pings_pesquisa);
         }
+        
+        /*Recebendo alguma resposta durante tempoComResposta - a thread de
+         *espera por conexões já se encarrega dessa tarefa*/
 
-        public void setTabela(ArrayList<String> tabela) {
-            this.tabela = tabela;
+        //Aguardando tempoComResposta milissegundos
+        try {Thread.sleep(tempoComResposta);} catch(Exception e) {}
+
+        ArrayList<PingsListNode> pings_list;
+        synchronized(pesquisas_ativas){
+            //Obtendo a lista de pings para os peers que responderam à pesquisa.
+            pings_list = pesquisas_ativas.get(termobusca);
+            //Retirando termobusca do mapa de pesquisas
+            pesquisas_ativas.remove(termobusca);
         }
-    }
-    
-    class ThreadAceitaConexoes implements Runnable {
-
-        @Override
-        public void run() {
-            while(true){
-                ServerSocket ssocket = null;
-                Socket socket = null;
+        if(pings_list == null){
+            return;
+        }
+        //Ordenando a lista de pings
+        Collections.sort(pings_list);
+        //Solicitando download de arquivo para o peer com menor ping disponível
+        boolean baixado = false;
+        for (PingsListNode node:pings_list){
+            if(!baixado){
+                //Obtendo o buffer de saída
+                OutputStream out = node.out;
+                //Criando buffer de saída de texto
+                PrintWriter msg_out = new PrintWriter(out, true);
+                //Enviando mensagem BAIXAR
+                String req_arq = "";
+                for(int i=0; i<termobusca.length(); i++){
+                    req_arq = req_arq + termobusca.charAt(i);
+                }
+                for(int i=termobusca.length(); i<tam_nomearq; i++){
+                    req_arq = req_arq + "_";
+                }
+                enviarMsg(MSG_DOWN, null, req_arq, out);
+                //Obtendo buffer de entrada
+                InputStream in = node.in;
+                //Criando buffer de leitura de bytes
+                DataInputStream dis = new DataInputStream(in);
                 try{
-                    //Criando servidor de conexões
-                    ssocket = new ServerSocket(mog_port);
-                    //Aguardando nova conexão
-                    socket = ssocket.accept();
-                    //Dedicando uma thread separada para a comunicação
-                    new Thread(new ThreadRecebeMsg(socket)).start();
+                    //Recebendo o tamanho do array de bytes
+                    int len = dis.readInt();
+                    //Recebendo o arquivo num array de bytes de tamanho len
+                    byte[] data = new byte[len];
+                    dis.readFully(data);
+                    //Salvando arquivo
+                    salvarArquivo(termobusca, data);
+                    
+                    baixado = true;
                 }
                 catch(Exception e) {}
             }
+            
+            //Fechando socket
+            try {node.socket.close();} catch(Exception e) {}
         }
-        
+        //Adicionar algum jeito de atualizar a lista de arquivos da janela
     }
     
-    
-    class ThreadRecebeMsg implements Runnable{
-        
-        Socket socket;
-        OutputStream out;
-        InputStream in;
-
-        public ThreadRecebeMsg(Socket socket) {
-            this.socket = socket;
-            try {
-                //Criando buffer de saída
-                out = socket.getOutputStream();
-                //Criando buffer de entrada
-                in = socket.getInputStream();
-            }
-            catch (IOException ex) {}
-        }
-        
-        @Override
-        @SuppressWarnings("empty-statement")
-        public void run() {
-            try{
-                //Criando buffer de chegada de texto
-                BufferedReader msg_in = 
-                        new BufferedReader(new InputStreamReader(in));
-                //Aguardando chegada de mensagem
-                String mensagem = msg_in.readLine();
-                //Processando mensagem recebida
-                MogP2PController.this.
-                        processarMsgRec(mensagem, socket, in, out);
-            }
-            catch(Exception e) {}
-        }
-        
-    }
-    
-    final HashMap<String,ArrayList<PingsListNode>> pesquisas_collection = 
-            new HashMap<String,ArrayList<PingsListNode>>();
-    
-    void processarMsgRec(
+    private void processarMsgRec(
             String mensagem, 
             Socket socket, 
             InputStream in, 
             OutputStream out)
     {
+        System.out.println("Entrou em processar MsgRec(msg:"+mensagem+")");
+        
         //Obtendo ip do peer remoto
         String ip = socket.getRemoteSocketAddress().toString();
+        
+        System.out.println("ip: "+ip);
         
         /*
          * Uma mensagem tem os seguintes campos na respectiva ordem:
@@ -222,9 +228,15 @@ public class MogP2PController {
         
         //Separando os campos da mensagem
         String tipomsg = mensagem.substring( 0, tam_tipomsg );
-        String nomearq = mensagem.substring( tam_tipomsg-1, tam_nomearq );
-        String ipremet = mensagem.substring( tam_nomearq-1, tam_ipremet );
-        String tmtoliv = mensagem.substring( tam_ipremet-1, tam_tmtoliv );
+        System.out.println("Tipo msg: "+tipomsg);
+        String nomearq = mensagem.substring( tam_tipomsg, tam_nomearq );
+        System.out.println("Nome arq: "+nomearq);
+        String ipremet = mensagem.substring( tam_nomearq, tam_ipremet );
+        System.out.println("IP remet: "+ipremet);
+        String tmtoliv = mensagem.substring( tam_ipremet, tam_tmtoliv );
+        System.out.println("TTL: "+tmtoliv);
+        
+        System.out.println("Passou por aqui");
         
         //Identificando o ip do remetente
         if(Integer.parseInt(tmtoliv) == ttl_inicial){
@@ -235,6 +247,7 @@ public class MogP2PController {
         if(tipomsg.
                 equals(MSG_ENTR))
         {
+            System.out.println("Processando MSG_ENTR");
             //Construir tabela para envio
             ArrayList<String> tbresp = new ArrayList<String>();
             //...
@@ -326,8 +339,8 @@ public class MogP2PController {
             long timefnish = System.currentTimeMillis();//Registra tempo de término
             
             //Guardar resultado do ping em uma lista (ordenar essa lista posteriormente)
-            synchronized (pesquisas_collection) {
-                ArrayList pings_pesquisa = pesquisas_collection.get(nomearq);
+            synchronized (pesquisas_ativas) {
+                ArrayList pings_pesquisa = pesquisas_ativas.get(nomearq);
                 if(pings_pesquisa == null){
                     return;
                 }
@@ -344,144 +357,7 @@ public class MogP2PController {
         }
     }
     
-    class PingsListNode implements Comparable {
-        public String host_ip;
-        public Long ping_time;
-        public Socket socket;
-        public InputStream in;
-        public OutputStream out;
-
-        public PingsListNode(
-                String host_ip,
-                Long ping_time,
-                Socket socket,
-                InputStream in,
-                OutputStream out)
-        {
-            this.host_ip = host_ip;
-            this.ping_time = ping_time;
-            this.socket = socket;
-            this.in = in;
-            this.out = out;
-        }
-
-        @Override
-        public int compareTo(Object t) {
-            PingsListNode arg = (PingsListNode) t;
-            return ping_time.compareTo(arg.ping_time);
-        }
-    }
-    
-    final ArrayList<String> lista_buscas_ativas = new ArrayList<String>();
-    
-    public void pesquisar(final String termobusca){
-        //Enviando uma mensagem de pesquisa para cada peer na tabela de pesquisa
-        for(String peer:peerspesq){
-            //new Thread(new EnvioMsg(MSG_PESQ, termobusca, peer)).start();
-            enviarMsg(MSG_PESQ, peer, termobusca, null);
-        }
-        
-        //Adicionando essa pesquisa ao mapa de pesquisas
-        synchronized(pesquisas_collection){
-            ArrayList<PingsListNode> pings_pesquisa;
-            pings_pesquisa = new ArrayList<PingsListNode>();
-            pesquisas_collection.put(termobusca, pings_pesquisa);
-        }
-        
-        /*Recebendo alguma resposta durante tempoComResposta - a thread de
-         *espera por conexões já se encarrega dessa tarefa*/
-
-        //Aguardando tempoComResposta milissegundos
-        try {Thread.sleep(tempoComResposta);} catch(Exception e) {}
-
-        ArrayList<PingsListNode> pings_list;
-        synchronized(pesquisas_collection){
-            //Obtendo a lista de pings para os peers que responderam à pesquisa.
-            pings_list = pesquisas_collection.get(termobusca);
-            //Retirando termobusca do mapa de pesquisas
-            pesquisas_collection.remove(termobusca);
-        }
-        if(pings_list == null){
-            return;
-        }
-        //Ordenando a lista de pings
-        Collections.sort(pings_list);
-        //Solicitando download de arquivo para o peer com menor ping disponível
-        boolean baixado = false;
-        for (PingsListNode node:pings_list){
-            if(!baixado){
-                //Obtendo o buffer de saída
-                OutputStream out = node.out;
-                //Criando buffer de saída de texto
-                PrintWriter msg_out = new PrintWriter(out, true);
-                //Enviando mensagem BAIXAR
-                String req_arq = "";
-                for(int i=0; i<termobusca.length(); i++){
-                    req_arq = req_arq + termobusca.charAt(i);
-                }
-                for(int i=termobusca.length(); i<tam_nomearq; i++){
-                    req_arq = req_arq + "_";
-                }
-                enviarMsg(MSG_DOWN, null, req_arq, out);
-                //Obtendo buffer de entrada
-                InputStream in = node.in;
-                //Criando buffer de leitura de bytes
-                DataInputStream dis = new DataInputStream(in);
-                try{
-                    //Recebendo o tamanho do array de bytes
-                    int len = dis.readInt();
-                    //Recebendo o arquivo num array de bytes de tamanho len
-                    byte[] data = new byte[len];
-                    dis.readFully(data);
-                    //Salvando arquivo
-                    salvarArquivo(termobusca, data);
-                    
-                    baixado = true;
-                }
-                catch(Exception e) {}
-            }
-            
-            //Fechando socket
-            try {node.socket.close();} catch(Exception e) {}
-        }
-        //Adicionar algum jeito de atualizar a lista de arquivos da janela
-    }
-    
-    /*Verifica se um arquivo existe em mogShare*/
-    private boolean verificarArquivo(String nome){
-        boolean ret = false;
-        
-        return ret;
-    }
-    
-    private void carregarArquivo(String nome, File arquivo){
-        arquivo = new File(mogShare+nome);
-    }
-    
-    private void salvarArquivo(String nome, byte[] data){
-        
-    }
-    
-    class ThreadEnvioMsg implements Runnable {
-        
-        private String tipomsg;
-        private String peerdest;
-        private String nomearq;
-
-        public ThreadEnvioMsg(String tipomsg, String nomearq, String peerdest) {
-            this.tipomsg = tipomsg;
-            this.peerdest = peerdest;
-            this.nomearq = nomearq;
-        }
-
-        @Override
-        public void run() {
-            MogP2PController.this.enviarMsg(tipomsg, peerdest, nomearq, null);
-        }
-        
-    }
-    
-    void enviarMsg(
+    private void enviarMsg(
             String tipomsg, 
             String peerdest, 
             String nomearq,
@@ -514,7 +390,22 @@ public class MogP2PController {
         }
     }
     
-    static byte[] serialize(Object obj){
+    /*Verifica se um arquivo existe em mogShare*/
+    private boolean verificarArquivo(String nome){
+        boolean ret = false;
+        
+        return ret;
+    }
+    
+    private void carregarArquivo(String nome, File arquivo){
+        arquivo = new File(mogShare+nome);
+    }
+    
+    private void salvarArquivo(String nome, byte[] data){
+        
+    }
+    
+    private byte[] serialize(Object obj){
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ObjectOutputStream os = null;
         try {
@@ -526,7 +417,7 @@ public class MogP2PController {
         return out.toByteArray();
     }
     
-    static Object deserialize(byte[] data){
+    private Object deserialize(byte[] data){
         ByteArrayInputStream in = new ByteArrayInputStream(data);
         ObjectInputStream is = null;
         Object ret = null;
@@ -538,6 +429,131 @@ public class MogP2PController {
         catch (ClassNotFoundException ex) {}
         
         return ret;
+    }
+    
+    protected class TabelaEncaps implements Serializable{
+        private ArrayList<String> tabela;
+
+        public TabelaEncaps(ArrayList<String> tabela) {
+            this.tabela = tabela;
+        }
+        
+        public ArrayList<String> getTabela() {
+            return tabela;
+        }
+
+        public void setTabela(ArrayList<String> tabela) {
+            this.tabela = tabela;
+        }
+    }
+    
+    protected class ThreadAceitaConexoes implements Runnable {
+
+        @Override
+        public void run() {
+            while(true){
+                ServerSocket ssocket = null;
+                Socket socket = null;
+                try{
+                    //Criando servidor de conexões
+                    ssocket = new ServerSocket(mog_port);
+                    //Aguardando nova conexão
+                    System.out.println("Esperando conexão");
+                    socket = ssocket.accept();
+                    //Dedicando uma thread separada para a comunicação
+                    new Thread(new ThreadRecebeMsg(socket)).start();
+                }
+                catch(Exception e) {}
+            }
+        }
+        
+    }
+    
+    protected class ThreadRecebeMsg implements Runnable{
+        
+        Socket socket;
+        OutputStream out;
+        InputStream in;
+
+        public ThreadRecebeMsg(Socket socket) {
+            this.socket = socket;
+            try {
+                //Criando buffer de saída
+                out = socket.getOutputStream();
+                //Criando buffer de entrada
+                in = socket.getInputStream();
+            }
+            catch (IOException ex) {}
+        }
+        
+        @Override
+        @SuppressWarnings("empty-statement")
+        public void run() {
+            try{
+                //Criando buffer de chegada de texto
+                BufferedReader msg_in = 
+                        new BufferedReader(new InputStreamReader(in));
+                //Aguardando chegada de mensagem
+                String mensagem = msg_in.readLine();
+                //Processando mensagem recebida
+                MogP2PController.this.
+                        processarMsgRec(mensagem, socket, in, out);
+            }
+            catch(Exception e) {
+                System.out.println("Socket fechado na thread de recebimento de mensagem");
+            }
+            if(!socket.isClosed()){
+                try {socket.close();} catch(Exception e) {}
+            }
+        }
+        
+    }
+    
+    protected class PingsListNode implements Comparable {
+        public String host_ip;
+        public Long ping_time;
+        public Socket socket;
+        public InputStream in;
+        public OutputStream out;
+
+        public PingsListNode(
+                String host_ip,
+                Long ping_time,
+                Socket socket,
+                InputStream in,
+                OutputStream out)
+        {
+            this.host_ip = host_ip;
+            this.ping_time = ping_time;
+            this.socket = socket;
+            this.in = in;
+            this.out = out;
+        }
+
+        @Override
+        public int compareTo(Object t) {
+            PingsListNode arg = (PingsListNode) t;
+            return ping_time.compareTo(arg.ping_time);
+        }
+    }
+    
+    protected class ThreadEnvioMsg implements Runnable {
+        
+        private String tipomsg;
+        private String peerdest;
+        private String nomearq;
+
+        public ThreadEnvioMsg(String tipomsg, String nomearq, String peerdest) {
+            this.tipomsg = tipomsg;
+            this.peerdest = peerdest;
+            this.nomearq = nomearq;
+        }
+
+        @Override
+        public void run() {
+            MogP2PController.this.enviarMsg(tipomsg, peerdest, nomearq, null);
+        }
+        
     }
     
 }
