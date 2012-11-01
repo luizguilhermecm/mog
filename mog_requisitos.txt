@@ -1,0 +1,32 @@
+-	Todo peer tem duas tabelas de endereços: uma primária e uma secundária. 
+	A tabela primária fornece endereços de peers aos quais podem ser 
+	emitidas mensagens de pesquisa. A tabela secundária armazena endereços 
+	de peers que originaram alguma pesquisa que atingiu o peer local.
+	
+-	O peer funciona recebendo requisições tipo ENTRADA de algum peer que 
+	quer entrar na rede e requisições do tipo PESQUISA de qualquer peer 
+	já existente.
+	
+-	Ao receber uma requisição do tipo ENTRADA, um peer envia ao 
+	requisitante uma pequena tabela de endereços de peers. O tamanho da
+	tabela enviada tem limite X. O requisitante usará esses endereços 
+	para fazer suas pesquisas (ou seja, esses endereços serão armazenados 
+	na tabela primária do peer requisitante). 
+	
+-	A requisição do tipo ENTRADA faz com que o recebedor armazene o 
+	endereço do requisitante em sua tabela secundária de endereços.
+	
+-	A primeira atividade que a aplicação realiza ao iniciar é enviar uma 
+	requisição do tipo ENTRADA a um (e apenas um) endereço pré-conhecido 
+	de peer vivo na rede. Se não tiver resposta, o peer se considera vivo, 
+	porém único na rede (o que não faz diferença no seu funcionamento).
+	
+-	Ao receber uma requisição do tipo PESQUISA(NOME), o peer verifica se 
+	o item buscado existe no diretório mogShare. Se sim, adquire o 
+	endereço do requisitante, estabelece uma conexão (socket) e faz um 
+	ping para o endereço, enviando logo em seguida o tempo de resposta 
+	através de uma mensagem do tipo EXISTE(NOME). Se não, verifica em qual 
+	nível da hierarquia de busca encontra-se essa requisição. Se o nível 
+	se encontra dentro do limite (exclusivo) da aplicação (3 por padrão), 
+	incrementa o valor do nível e encaminha a requisição para todos os 
+	peers em sua tabela primária. Se não, não processa mais a requisição.

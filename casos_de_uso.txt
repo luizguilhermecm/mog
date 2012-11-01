@@ -1,0 +1,16 @@
+Iniciar programa:
+-Mandar mensagem ENTRADA pro peer conhecido
+-Receber a tabela de IPs pesquisáveis do peer conhecido
+-Armazenar tabela
+
+Pesquisar (caso 1):
+-Carregar tabela de IPs pesquisáveis
+-Enviar a todos os IPs a mensagem PESQUISA(NOME)
+-Aguardar alguma resposta durante tempoComResposta
+-Pegar o IP do remetente da resposta, pingar e armazenar o tempo de ping em uma lista ordenada
+-Ao fim de tempoComResposta, pegar o IP referente ao primeiro item da lista de pings
+-Usar esse IP para baixar o arquivo
+-Enviar uma mensagem BAIXAR(NOME) para o IP eleito
+-Aguardar envio do arquivo
+-Ao receber os bytes, salvar em arquivo com o devido nome
+
