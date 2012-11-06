@@ -1,11 +1,13 @@
 package mog;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -19,6 +21,8 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @SuppressWarnings("UnusedAssignment")
 public class MogP2PController {
@@ -62,11 +66,11 @@ public class MogP2PController {
     //Tabela de peers usados para pesquisa (cada nó da lista é um IP)
     private final ArrayList<String> peerspesq = new ArrayList<String>();
     
-    //Tabela de peers que remeteram alguma pesquisa ao peer local
+    //Tabela de peers que atingiram o peer local com alguma mensagem (direta ou indiretamente)
     private final ArrayList<String> peers_reached = new ArrayList<String>();
     
     //Tamanho do array de resposta à MSG_ENTR
-    private final int tam_resp_entr = 4;
+    private final int tam_tabela_prim = 2;
     
     //IP de um peer pré-conhecido
     private String peer_inicial = "localhost";
@@ -103,6 +107,9 @@ public class MogP2PController {
             return;
         }
         
+        //TODO: criar thread que pinga os IPs da lista primária e remove os inexistentes
+        //...
+        
         //enviar ao peer inicial uma mensagem do tipo ENTRADA
         OutputStream buffer_out = null;
         try{
@@ -111,27 +118,34 @@ public class MogP2PController {
         catch(Exception e) {}
         enviarMsg(MSG_ENTR, null, ARQ_NULO, buffer_out);
         
-        //Recebendo tabela
+        //Criando buffer de entrada
         InputStream buffer_in = null;
-        try{
+        try {
             buffer_in = default_peer_socket.getInputStream();
+        } catch (Exception e) {
+            System.out.println("Problema ao criar buffer de entrada");
+            Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, e);
         }
-        catch(Exception e) {}
-        DataInputStream dtabuffer_in = new DataInputStream(buffer_in);
-        byte[] tblainic_s = null;
-        try{
-            //verifiando o tamanho do vetor de bytes
-            int tamtbla = dtabuffer_in.readInt();
-            //alocando espaço temporário de tabela serializada
-            tblainic_s = new byte[tamtbla];
-            //guardando temporariamente a tabela serializada
-            dtabuffer_in.readFully(tblainic_s);
+        
+        //Recebendo tabela
+        ObjectInputStream ois = null;
+        ArrayList<String> tblainic = null;
+        try {
+            //Obtendo a tabela serializada
+            ois = new ObjectInputStream(buffer_in);
+            //Desserializando tabela
+            tblainic = (ArrayList<String>) ois.readObject();
+        } catch (IOException ex) {
+            Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (ClassNotFoundException cnfe){
+            Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, cnfe);
         }
-        catch (IOException ex) {System.out.println("Problema ao receber tabela inicial");}
-        //deserializar tabela recebida (obtendo-a encapsulada)
-        TabelaEncaps tblainic_e = (TabelaEncaps) deserialize(tblainic_s);
         //Guardando tabela
-        peerspesq.addAll(tblainic_e.getTabela());
+        peerspesq.addAll(tblainic);
+        
+        for(String ip:peerspesq){
+            System.out.println("peer: "+ip);
+        }
     }
     
     public void pesquisar(final String termobusca){
@@ -188,9 +202,11 @@ public class MogP2PController {
                 InputStream in = node.in;
                 //Criando buffer de leitura de bytes
                 DataInputStream dis = new DataInputStream(in);
+                BufferedReader br = new BufferedReader(new InputStreamReader(in));
                 try{
                     //Recebendo o tamanho do array de bytes
-                    int len = dis.readInt();
+                    String l = br.readLine();
+                    int len = Integer.parseInt(l);
                     //Recebendo o arquivo num array de bytes de tamanho len
                     byte[] data = new byte[len];
                     dis.readFully(data);
@@ -208,6 +224,8 @@ public class MogP2PController {
         //Adicionar algum jeito de atualizar a lista de arquivos da janela
     }
     
+    private int cont1 = 0;//posição da tabela primaria usada como resposta a MSG_ENTR
+    private int cont2 = 0;//posição da tabela secundaria usada como resposta a MSG_ENTR
     private void processarMsgRec(
             String mensagem, 
             Socket socket, 
@@ -227,13 +245,14 @@ public class MogP2PController {
          */
         
         //Separando os campos da mensagem
-        String tipomsg = mensagem.substring( 0, tam_tipomsg );
+        int pos1 =0, pos2 = 0;
+        String tipomsg = mensagem.substring( pos1=0, pos2+=tam_tipomsg );
         System.out.println("Tipo msg: "+tipomsg);
-        String nomearq = mensagem.substring( tam_tipomsg, tam_nomearq );
+        String nomearq = mensagem.substring( pos1=pos2, pos2+=tam_nomearq );
         System.out.println("Nome arq: "+nomearq);
-        String ipremet = mensagem.substring( tam_nomearq, tam_ipremet );
+        String ipremet = mensagem.substring( pos1=pos2, pos2+=tam_ipremet );
         System.out.println("IP remet: "+ipremet);
-        String tmtoliv = mensagem.substring( tam_ipremet, tam_tmtoliv );
+        String tmtoliv = mensagem.substring( pos1=pos2, pos2+=tam_tmtoliv );
         System.out.println("TTL: "+tmtoliv);
         
         System.out.println("Passou por aqui");
@@ -243,6 +262,13 @@ public class MogP2PController {
             ipremet = ""+ip;
         }
         
+        //Conferindo se ipremet está em alguma lista de IPs e adicionando em caso negativo
+        if(!peerspesq.contains(ipremet)){
+            if(!peers_reached.contains(ipremet)){
+                peers_reached.add(ipremet);
+            }
+        }
+        
         //Identificando o tipo de mensagem e providenciando resposta
         if(tipomsg.
                 equals(MSG_ENTR))
@@ -250,21 +276,37 @@ public class MogP2PController {
             System.out.println("Processando MSG_ENTR");
             //Construir tabela para envio
             ArrayList<String> tbresp = new ArrayList<String>();
-            //...
-            //Encapsulando tabela
-            TabelaEncaps tbresp_e = new TabelaEncaps(tbresp);
-            //Serializando tabela
-            @SuppressWarnings("MismatchedReadAndWriteOfArray")
-            byte[] tbresp_s = serialize(tbresp_e);
-            //Criando buffer de escrita de bytes
-            DataOutputStream dos = new DataOutputStream(out);
-            try {
-                //Enviando tamanho do vetor de bytes
-                dos.writeInt(tbresp_s.length);
-                //Enviando a tabela serializada
-                dos.write(tbresp_s);
+            //Pegando um peer da tabela primária
+            String peer1 = peerspesq.get(cont1);
+            if(peer1 != null){
+                tbresp.add(peer1);
+                int pri_tab_size = peerspesq.size();
+                cont1 = (++cont1)%pri_tab_size;//da próxima vez, outro peer será enviado
             }
-            catch (IOException ex) {}
+            //Pegando um peer da tabela secundária
+            String peer2 = peers_reached.get(cont2);
+            if(peer2 != null){
+                tbresp.add(peer2);
+                int sec_tab_size = peers_reached.size();
+                cont2 = (++cont2)%sec_tab_size;//da próxima vez, outro peer será enviado
+            }
+            //TODO: se a tabela de resposta chegar ao peer remoto com tamanho 
+            //menor do que o máximo, o IP do peer que a enviou deverá constar 
+            //na tabela primária
+            //...
+            //Envio de tabela
+            ObjectOutputStream oos = null;
+            try {
+                //Criando stream de envio da tabela
+                oos = new ObjectOutputStream(out);
+                //Serializando e enviando tabela
+                oos.writeObject(tbresp);
+                //Fechando stream de escrita
+                oos.close();
+            } catch (IOException ex) {
+                Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            
         }
         else if(tipomsg.
                 equals(MSG_PESQ))
@@ -274,6 +316,25 @@ public class MogP2PController {
             
             /*TODO: verificar se arquivo existe. Se sim, responder com EXISTE. 
              *Se não, reencaminhar mensagem para todos os IPs da lista primária.*/
+            
+            //Caso arquivo não exista:
+            if( !verificarArquivo(nomearq)) {
+                //Se o ttl da pesquisa for 0, a mensagem nao deve ser repassada
+                int ttl = Integer.parseInt(tmtoliv);
+                if( ttl == 0 ){
+                    return;
+                }
+                //Encaminhando a mensagem para todos os peers da tabela primária
+                for(String peer:peerspesq){
+                    //Buffer de escrita de mensagem
+                    PrintWriter pw = new PrintWriter(out, true);
+                    //Enviando mensagem
+                    pw.println( tipomsg+nomearq+ipremet+(--ttl) );
+                    //Fechando stream de mensagem
+                    pw.close();
+                    //Nota: não me preocupo em fechar o socket porque o outro peer já se encarrega disso
+                }
+            }
             
             //Caso arquivo exista:
             Socket s;
@@ -296,35 +357,38 @@ public class MogP2PController {
             catch(Exception e) {return;}//Exceção: o socket provavelmente foi fechado no outro peer
             //Enviar MSG_PING como resposta
             enviarMsg(MSG_PING, null, ARQ_NULO, s_out);
-            //Aguardar MSG_DOWN
+            //Aguardar MSG_DOWN - a thread de recebimento de msg já se encarrega dess tarefa.
+            /**
             try {br.readLine();}
             catch(Exception e) {return;}//Exceção: o socket provavelmente foi fechado no outro peer
+            /**/
+        }
+        else if(tipomsg.
+                equals(MSG_DOWN))
+        {
+            //Caso ainda não usado, mas é idêntico à etapa "Enviar arquivo" do caso MSG_PESQ
             //Enviar arquivo
             try{
                 //Carregando o arquivo
                 File arquivo = null;
                 carregarArquivo(nomearq, arquivo);
                 //Serializando o arquivo
-                byte[] ba = serialize(arquivo);
+                byte[] fba = new byte[ (int) arquivo.length() ];
+                BufferedInputStream bis =
+                        new BufferedInputStream(new FileInputStream(arquivo));
+                bis.read(fba, 0, fba.length);
                 //Criando buffer de saída de bytes
                 DataOutputStream dos = new DataOutputStream(out);
                 //Informando o tamanho do vetor de bytes
-                dos.writeInt(ba.length);
+                dos.writeInt(fba.length);
                 //Enviando o arquivo
-                dos.write(ba);
+                dos.write(fba);
             }
             catch(Exception e){}
         }
         else if(tipomsg.
-                equals(MSG_DOWN))
-        {
-            //Caso ainda não usado, mas é idêntico à etapa "Enviar arquivo" do caso MSG_PESQ
-        }
-        else if(tipomsg.
                 equals(MSG_EXST))
         {
-            //TODO: adicionar algum tipo de verificação a respeito da validade dessa mensagem
-            
             //Pingando no peer remoto
             long timestart = System.currentTimeMillis();//Registra tempo inicial
             enviarMsg(MSG_PING, null, ARQ_NULO, out);
@@ -334,6 +398,7 @@ public class MogP2PController {
                 //Aguardando alguma resposta
                 msg_in.readLine();
                 //Resposta recebida!
+                msg_in.close();
             } 
             catch(Exception e) {return;}
             long timefnish = System.currentTimeMillis();//Registra tempo de término
@@ -341,7 +406,7 @@ public class MogP2PController {
             //Guardar resultado do ping em uma lista (ordenar essa lista posteriormente)
             synchronized (pesquisas_ativas) {
                 ArrayList pings_pesquisa = pesquisas_ativas.get(nomearq);
-                if(pings_pesquisa == null){
+                if(pings_pesquisa == null){//Se nao encontrou essa pesquisa, é porque tempoComResposta já expirou
                     return;
                 }
                 Long ping_time = timefnish-timestart;
@@ -353,7 +418,8 @@ public class MogP2PController {
         else if(tipomsg.
                 equals(MSG_PING))
         {
-            MogP2PController.this.enviarMsg(MSG_PING, null, ARQ_NULO, out);
+            //Caso ainda não usado
+            //MogP2PController.this.enviarMsg(MSG_PING, null, ARQ_NULO, out);
         }
     }
     
@@ -392,12 +458,19 @@ public class MogP2PController {
     
     /*Verifica se um arquivo existe em mogShare*/
     private boolean verificarArquivo(String nome){
-        boolean ret = false;
-        
-        return ret;
+        File file = new File(mogShare+nome);
+        if( !file.exists() ){
+            return false;
+        }
+        else{
+            return true;
+        }
     }
     
     private void carregarArquivo(String nome, File arquivo){
+        if( !verificarArquivo(nome) ){
+            return;
+        }
         arquivo = new File(mogShare+nome);
     }
     
@@ -429,22 +502,6 @@ public class MogP2PController {
         catch (ClassNotFoundException ex) {}
         
         return ret;
-    }
-    
-    protected class TabelaEncaps implements Serializable{
-        private ArrayList<String> tabela;
-
-        public TabelaEncaps(ArrayList<String> tabela) {
-            this.tabela = tabela;
-        }
-        
-        public ArrayList<String> getTabela() {
-            return tabela;
-        }
-
-        public void setTabela(ArrayList<String> tabela) {
-            this.tabela = tabela;
-        }
     }
     
     protected class ThreadAceitaConexoes implements Runnable {
@@ -489,7 +546,8 @@ public class MogP2PController {
         @Override
         @SuppressWarnings("empty-statement")
         public void run() {
-            try{
+            try {
+            //try{
                 //Criando buffer de chegada de texto
                 BufferedReader msg_in = 
                         new BufferedReader(new InputStreamReader(in));
@@ -498,10 +556,15 @@ public class MogP2PController {
                 //Processando mensagem recebida
                 MogP2PController.this.
                         processarMsgRec(mensagem, socket, in, out);
-            }
+            /*}
             catch(Exception e) {
                 System.out.println("Socket fechado na thread de recebimento de mensagem");
+            }*/   
+            } catch (IOException ex) {
+                Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
+                System.out.println("Socket fechado na thread de recebimento de mensagem");
             }
+            //Fechando o socket aberto pelo recebimento da mensagem
             if(!socket.isClosed()){
                 try {socket.close();} catch(Exception e) {}
             }
