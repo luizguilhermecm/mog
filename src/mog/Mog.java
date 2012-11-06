@@ -2,11 +2,15 @@ package mog;
 
 public class Mog extends javax.swing.JFrame {
 
+    private int estadoBotao; // Identifica o estado do Botao
+
     /**
      * Creates new form Mog
      */
     public Mog() {
         initComponents();
+        estadoBotao = 0;
+        jFrame1.setTitle("MogShare - version 0.1");
     }
 
     /**
@@ -18,21 +22,85 @@ public class Mog extends javax.swing.JFrame {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
+        jFrame1 = new javax.swing.JFrame();
+        botaoPlay = new javax.swing.JToggleButton();
+        jSeparator1 = new javax.swing.JSeparator();
+        jSlider1 = new javax.swing.JSlider();
+
+        javax.swing.GroupLayout jFrame1Layout = new javax.swing.GroupLayout(jFrame1.getContentPane());
+        jFrame1.getContentPane().setLayout(jFrame1Layout);
+        jFrame1Layout.setHorizontalGroup(
+            jFrame1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGap(0, 400, Short.MAX_VALUE)
+        );
+        jFrame1Layout.setVerticalGroup(
+            jFrame1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGap(0, 300, Short.MAX_VALUE)
+        );
+
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+
+        botaoPlay.setIcon(new javax.swing.ImageIcon(getClass().getResource("/mog/imagens/playbutton.png"))); // NOI18N
+        botaoPlay.setLabel("Play");
+        botaoPlay.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                botaoPlayMouseClicked(evt);
+            }
+        });
+        botaoPlay.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                botaoPlayActionPerformed(evt);
+            }
+        });
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 400, Short.MAX_VALUE)
+            .addGroup(layout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jSeparator1))
+            .addGroup(layout.createSequentialGroup()
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(layout.createSequentialGroup()
+                        .addGap(163, 163, 163)
+                        .addComponent(jSlider1, javax.swing.GroupLayout.PREFERRED_SIZE, 113, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(layout.createSequentialGroup()
+                        .addContainerGap()
+                        .addComponent(botaoPlay, javax.swing.GroupLayout.PREFERRED_SIZE, 105, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                .addGap(0, 478, Short.MAX_VALUE))
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 300, Short.MAX_VALUE)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
+                .addGap(16, 16, 16)
+                .addComponent(botaoPlay)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jSeparator1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(78, 78, 78)
+                .addComponent(jSlider1, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(302, Short.MAX_VALUE))
         );
+
+        botaoPlay.getAccessibleContext().setAccessibleName("botaoPlay");
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
+
+    private void botaoPlayMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_botaoPlayMouseClicked
+        if (estadoBotao == 0) {
+            botaoPlay.setIcon(new javax.swing.ImageIcon(getClass().getResource("/mog/imagens/pausebutton.png")));
+            botaoPlay.setLabel("Pause");
+            estadoBotao = 1;
+        } else {
+            botaoPlay.setIcon(new javax.swing.ImageIcon(getClass().getResource("/mog/imagens/playbutton.png")));
+            botaoPlay.setLabel("Play");
+            estadoBotao = 0;
+        }
+    }//GEN-LAST:event_botaoPlayMouseClicked
+
+    private void botaoPlayActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_botaoPlayActionPerformed
+    }//GEN-LAST:event_botaoPlayActionPerformed
 
     /**
      * @param args the command line arguments
@@ -64,13 +132,17 @@ public class Mog extends javax.swing.JFrame {
         /* Create and display the form */
         java.awt.EventQueue.invokeLater(new Runnable() {
             public void run() {
-                
+
                 System.out.println("teste");
-                
+
                 new Mog().setVisible(true);
             }
         });
     }
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JToggleButton botaoPlay;
+    private javax.swing.JFrame jFrame1;
+    private javax.swing.JSeparator jSeparator1;
+    private javax.swing.JSlider jSlider1;
     // End of variables declaration//GEN-END:variables
 }
