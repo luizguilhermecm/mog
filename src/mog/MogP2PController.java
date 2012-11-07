@@ -2,12 +2,12 @@ package mog;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -15,7 +15,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.io.Serializable;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -29,7 +28,7 @@ import java.util.logging.Logger;
 public class MogP2PController {
     
     //Diretório mogShared
-    private final String mogShare = "\\mogShare";
+    private final String mogShare = "\\mogShare\\";
     
     //Defines de tipos de mensagem do protocolo
     private final String MSG_ENTR = "ENTR"; //mensagem solicitando participação na rede P2P
@@ -41,10 +40,13 @@ public class MogP2PController {
     //Campo nulo padrão de nome de arquivo
     private final String ARQ_NULO = "                    ";//20 char
     
+    //Campo nulo padrão de endereço IP
+    private final String EIP_NULO = "               ";//15 char
+    
     //Defines dos tamanhos de campos das mensagens
     private final int tam_tipomsg = 4; //4 char para tipo de msg
-    private final int tam_nomearq = 20; //20 char para nome de arquivo
-    private final int tam_ipremet = 15; //15 char para ip do remetente da msg
+    private final int tam_nomearq = ARQ_NULO.length(); //tamanho para nome de arquivo
+    private final int tam_ipremet = EIP_NULO.length(); //tamanho para ip do remetente da msg
     private final int tam_tmtoliv = 1; //1 char para contador de TTL da msg
     
     //Define de tamanho da mensagem
@@ -58,7 +60,7 @@ public class MogP2PController {
     private final int mog_port = 12345;
     
     //Defines de intervalos do protocolo (em milissegundos)
-    private final long tempoComResposta = 1000;
+    private final long tempoComResposta = 2;
     private final long tempoSemResposta = 1000;
     private final long mogTime = 1000; //intervalo de tempo entre cada ping.
     
@@ -70,16 +72,16 @@ public class MogP2PController {
     //Tabela secundária - peers que atingiram o peer local com alguma mensagem (direta ou indiretamente)
     private final ArrayList<String> peers_reached = new ArrayList<String>();
     
-    //Tamanho do array de resposta à MSG_ENTR
+    //Tamanho máximo da tabela primária - e, consequentemente, do tabela de resposta a MSG_ENTR
     private final int tam_tabela_prim = 2;
     
-    private int cont1 = 0;//posição da tabela primaria usada como resposta a MSG_ENTR
-    private int cont2 = 0;//posição da tabela secundaria usada como resposta a MSG_ENTR
+    private int cont1 = 0;//linha da tabela primária usada como resposta a MSG_ENTR
+    private int cont2 = 0;//linha da tabela secundária usada como resposta a MSG_ENTR
     
     //IP de um peer pré-conhecido
-    private String peer_inicial = "localhost";
+    private String peer_inicial = "ARTHENCOU-NOTE";
     
-    //Lista de pesquisas ativas
+    //Tabela de pesquisas ativas
     private final HashMap<String,ArrayList<PingsListNode>> pesquisas_ativas = 
             new HashMap<String,ArrayList<PingsListNode>>();
     
@@ -99,15 +101,16 @@ public class MogP2PController {
         
         //estabelecer uma conexão (socket) com o peer inicial pré conhecido
         Socket socket_peer_inicial = null;
-        try{
+        try {
             socket_peer_inicial = new Socket(peer_inicial, mog_port);
+        } catch(Exception e) {
+            exit = true;
         }
-        catch(Exception e) {exit = true;}
         
         //criar mecanismo de escuta por qualquer mensagem remota
         new Thread(new ThreadAceitaConexoes()).start();
         
-        if(exit) {
+        if (exit) {
             return;
         }
         
@@ -147,7 +150,7 @@ public class MogP2PController {
         //Verificando se a tabela recebida é menor do que o tamanho máximo
         if ( tblainic.size() < this.tam_tabela_prim ) {
             //Caso seja menor, adicione o IP de peer_inicial
-            String ip = socket_peer_inicial.getInetAddress().toString();
+            String ip = socket_peer_inicial.getInetAddress().toString().split("/")[1];
             tblainic.add(ip);
         }
         //Guardando tabela
@@ -159,12 +162,15 @@ public class MogP2PController {
     }
     
     public void pesquisar(final String termobusca){
+        
         System.out.println("Entrou em pesquisar(\""+termobusca+"\")");
+        
         //Enviando uma mensagem de pesquisa para cada peer na tabela de pesquisa
-        for(String peer:peerspesq){
-            //new Thread(new EnvioMsg(MSG_PESQ, termobusca, peer)).start();
+        for (String peer:peerspesq){
             enviarMsg(MSG_PESQ, peer, termobusca, null);
         }
+        
+        System.out.println("Envou mensagem para todos da lista");
         
         //Adicionando essa pesquisa ao mapa de pesquisas
         synchronized(pesquisas_ativas){
@@ -187,6 +193,7 @@ public class MogP2PController {
             pesquisas_ativas.remove(termobusca);
         }
         if(pings_list == null){
+            System.out.println("Esse arquivo ainda nao existe na rede Mog P2P");
             return;
         }
         //Ordenando a lista de pings
@@ -202,14 +209,7 @@ public class MogP2PController {
                     /**OutputStream out = node.out;/**/
                     OutputStream out = socket.getOutputStream();
                     //Enviando mensagem BAIXAR
-                    String req_arq = "";
-                    for(int i=0; i<termobusca.length(); i++){
-                        req_arq = req_arq + termobusca.charAt(i);
-                    }
-                    for(int i=termobusca.length(); i<tam_nomearq; i++){
-                        req_arq = req_arq + " ";
-                    }
-                    enviarMsg(MSG_DOWN, null, req_arq, out);
+                    enviarMsg(MSG_DOWN, null, termobusca, out);
                     //Obtendo buffer de entrada
                     /**InputStream in = node.in;/**/
                     InputStream in = socket.getInputStream();
@@ -248,13 +248,10 @@ public class MogP2PController {
             InputStream in, 
             OutputStream out)
     {
-        System.out.println("Entrou em processar MsgRec(msg:"+mensagem+")");
+        System.out.println("Entrou em processar MsgRec(msg: "+mensagem+")");
         
         //Obtendo ip do peer remoto
-        //String ip = socket.getRemoteSocketAddress().toString();
-        String ip = socket.getInetAddress().toString();
-        
-        System.out.println("ipremet: "+ip);
+        String ip = socket.getInetAddress().toString().split("/")[1];
         
         /*
          * Uma mensagem tem os seguintes campos na respectiva ordem:
@@ -272,17 +269,24 @@ public class MogP2PController {
         String tmtoliv = mensagem.substring( pos1=pos2, pos2+=tam_tmtoliv );
         System.out.println("TTL: "+tmtoliv);
         
-        System.out.println("Passou por aqui");
-        
         //Identificando o ip do remetente
         if(Integer.parseInt(tmtoliv) == ttl_inicial){
             ipremet = ""+ip;
+            for(int i=ipremet.length(); i<tam_ipremet; i++) {
+                ipremet = ipremet + " ";
+            }
         }
         
-        //Conferindo se ipremet está em alguma lista de IPs e adicionando em caso negativo
-        if(!peerspesq.contains(ipremet)){
-            if(!peers_reached.contains(ipremet)){
-                peers_reached.add(ipremet);
+        //Removendo espaços vazios para uso do campo ipremet
+        String remet = ipremet.trim();
+        
+        //Conferindo se remet está em alguma lista de IPs e adicionando em caso negativo
+        if(!peerspesq.contains(remet)){
+            if(!peers_reached.contains(remet)){
+                /*Mudar isso depois!!!*/
+                peerspesq.add(remet);
+                /**/
+                peers_reached.add(remet);
             }
         }
         
@@ -296,11 +300,11 @@ public class MogP2PController {
             //Pegando um peer da tabela primária
             if( (cont1+1) <= peerspesq.size() ) {
                 String peer1 = peerspesq.get(cont1);
-                if( peer1.equals(ipremet) ) {
+                if( peer1.equals(remet) ) {
                     cont1 = (++cont1)%(peerspesq.size());
                     peer1 = peerspesq.get(cont1);
                 }
-                if( !peer1.equals(ipremet) ) {
+                if( !peer1.equals(remet) ) {
                     tbresp.add(peer1);
                     cont1 = (++cont1)%(peerspesq.size());//da próxima vez, outro peer será enviado
                 }
@@ -308,15 +312,16 @@ public class MogP2PController {
             //Pegando um peer da tabela secundária
             if( (cont2+1) <= peers_reached.size() ) {
                 String peer2 = peers_reached.get(cont2);
-                if( peer2.equals(ipremet) ) {
+                if( peer2.equals(remet) ) {
                     cont2 = (++cont2)%peers_reached.size();
                     peer2 = peers_reached.get(cont2);
                 }
-                if( !peer2.equals(ipremet) ) {
+                if( !peer2.equals(remet) ) {
                     tbresp.add(peer2);
                     cont2 = (++cont2)%peers_reached.size();//da próxima vez, outro peer será enviado
                 }
             }
+            System.out.println("Terminou de construir tabela");
             //Envio de tabela
             ObjectOutputStream oos = null;
             try {
@@ -334,6 +339,8 @@ public class MogP2PController {
         else if(tipomsg.
                 equals(MSG_PESQ))
         {
+            System.out.println("Processando MSG_PESQ");
+            
             //O remetente de MSG_PESQ não aguarda nenhuma mensagem nesse socket. Portanto devo fecha-lo
             try {socket.close();} catch(Exception e) {}
             
@@ -341,14 +348,16 @@ public class MogP2PController {
              *Se não, reencaminhar mensagem para todos os IPs da lista primária.*/
             
             //Caso arquivo não exista:
-            if( !verificarArquivo(nomearq) ) {
+            if( !verificarArquivo( nomearq.trim() ) ) {
+                System.out.println("Arquivo nao existe!");
                 //Se o ttl da pesquisa for 0, a mensagem nao deve ser repassada
                 int ttl = Integer.parseInt(tmtoliv);
                 if( ttl == 0 ){
                     return;
                 }
                 //Encaminhando a mensagem para todos os peers da tabela primária
-                for(String peer:peerspesq){
+                for (String peer:peerspesq) {
+                    System.out.println("Achei "+peer+" na lista primaria");
                     /* Sugestão: aqui pode ser usado algum mecanismo que 
                      * evite ciclos de MSG_PESQ na rede Mog P2P. Pode ser uma
                      * tabela de pesquisas associadas a um ipremet cujas linhas
@@ -358,27 +367,39 @@ public class MogP2PController {
                      * a MSG_PESQ a um peer que já a encaminhou anteriormente.
                      */
                     //Verificando se peer é igual a ipremet
-                    if( peer.equals(ipremet) ){
+                    if( peer.equals(remet) ){
                         return;
                     }
-                    //Buffer de escrita de mensagem
-                    PrintWriter pw = new PrintWriter(out, true);
-                    //Enviando mensagem
-                    pw.println( tipomsg+nomearq+ipremet+(--ttl) );
-                    //Fechando stream de mensagem
-                    pw.close();
-                    //Nota: não me preocupo em fechar o socket porque o outro peer já se encarrega disso
+                    try {
+                        //Criando socket com peer da lista primária
+                        Socket s = new Socket(peer, mog_port);
+                        //Obtendo buffer de saída
+                        OutputStream s_out = s.getOutputStream();
+                        //Stream de escrita de mensagem
+                        PrintWriter pw = new PrintWriter(s_out, true);
+                        //Enviando mensagem
+                        System.out.println("Encaminhando MSG_PESQ para "+peer);
+                        pw.println( tipomsg+nomearq+ipremet+(--ttl) );
+                        //Fechando stream de mensagem
+                        pw.close();
+                        //Nota: não me preocupo em fechar o socket porque o outro peer já se encarrega disso
+                    } catch (UnknownHostException ex) {
+                        Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
+                    } catch (IOException ex) {
+                        Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
+                    }
                 }
                 return;
             }
             
             //Caso arquivo exista:
+            System.out.println("Arquivo existe!!!");
             Socket s;
             InputStream s_in;
             OutputStream s_out;
             try {
-                //Estabelecer um socket com ipremet
-                s = new Socket(ipremet, mog_port);
+                //Estabelecer um socket com remet
+                s = new Socket(remet, mog_port);
                 //Criar buffer entrada
                 s_in = s.getInputStream();
                 //Criar buffer saída
@@ -386,12 +407,15 @@ public class MogP2PController {
             }
             catch(Exception e) {return;}
             //Enviar MSG_EXST
+            System.out.println("Enviando MSG_EXST");
             enviarMsg(MSG_EXST, null, nomearq, s_out);
             //Aguardar por MSG_PING
             BufferedReader br = new BufferedReader(new InputStreamReader(s_in));
+            System.out.println("Recebeu MSG_PING");
             try {br.readLine();}
             catch(Exception e) {return;}//Exceção: o socket provavelmente foi fechado no outro peer
             //Enviar MSG_PING como resposta
+            System.out.println("Enviando MSG_PING");
             enviarMsg(MSG_PING, null, ARQ_NULO, s_out);
             //Aguardar MSG_DOWN - a thread de recebimento de msg já se encarrega dessa tarefa.
             /**
@@ -402,11 +426,12 @@ public class MogP2PController {
         else if(tipomsg.
                 equals(MSG_DOWN))
         {
+            System.out.println("Processando MSG_DOWN");
             //Enviar arquivo
             try{
                 //Carregando o arquivo
                 File arquivo = null;
-                carregarArquivo(nomearq, arquivo);
+                carregarArquivo( nomearq.trim(), arquivo);
                 //Serializando o arquivo
                 byte[] fba = new byte[ (int) arquivo.length() ];
                 BufferedInputStream bis =
@@ -447,7 +472,7 @@ public class MogP2PController {
                 }
                 Long ping_time = timefnish-timestart;
                 PingsListNode node = 
-                        new PingsListNode(ipremet, ping_time/**, socket, in, out/**/);
+                        new PingsListNode(remet, ping_time/**, socket, in, out/**/);
                 pings_pesquisa.add(node);
             }
         }
@@ -466,30 +491,34 @@ public class MogP2PController {
             OutputStream out
             )
     {
-        Socket peerpesq_sckt = null;
-        InputStream buffer_in = null;
-        OutputStream buffer_out = out;
-        PrintWriter msgbuffer_out = null;
-        try{
-        if(out == null){
-            //estabelecendo conexão com o peer desejado
-            peerpesq_sckt = new Socket(peerdest, mog_port);
-            //obtendo buffer de entrada (binário)
-            buffer_in = peerpesq_sckt.getInputStream();
-            //obtendo buffer de saída (binário)
-            buffer_out = peerpesq_sckt.getOutputStream();
+        try {
+            //normalizando o campo nomearq
+            for (int i=nomearq.length(); i<tam_nomearq; i++) {
+                nomearq = nomearq + " ";
+            }
+            OutputStream buffer_out = out;
+            //Se não foi especificada nenhuma conexão já estabelecida, crie-a
+            if(out == null){
+                //estabelecendo conexão com o peer desejado
+                Socket peerpesq_sckt = new Socket(peerdest, mog_port);
+                //obtendo buffer de saída (binário)
+                buffer_out = peerpesq_sckt.getOutputStream();
+            }
+            //criando Stream de saída de texto
+            PrintWriter msgbuffer_out = new PrintWriter(buffer_out, true);
+            //enviando mensagem
+            msgbuffer_out.println(tipomsg+nomearq+EIP_NULO+ttl_inicial);
+            /* Nota: é melhor não fechar o socket aqui pois isso gerará uma 
+             * exceção no peer remoto, podendo impedir o processamento da mensagem.
+             * Ao terminar o processamento, o peer remoto fechará o socket.
+            /**
+            //fechando o socket criado
+            if(peerpesq_sckt != null){
+                try {peerpesq_sckt.close();} catch(Exception e) {}
+            }
+            /**/
         }
-        }
-        catch(Exception e) {return;}
-        //criando buffer de saída de mensagem
-        msgbuffer_out = new PrintWriter(buffer_out, true);
-        //enviando mensagem
-        msgbuffer_out.println(tipomsg+nomearq+"               "+ttl_inicial);
-        
-        //fechando o socket criado
-        if(peerpesq_sckt != null){
-            try {peerpesq_sckt.close();} catch(Exception e) {}
-        }
+        catch(Exception e) {}
     }
     
     /*Verifica se um arquivo existe em mogShare*/
@@ -511,7 +540,15 @@ public class MogP2PController {
     }
     
     private void salvarArquivo(String nome, byte[] data){
-        
+        try {
+            FileOutputStream fos = new FileOutputStream(mogShare+nome);
+            fos.write(data);
+            fos.close();
+        } catch (FileNotFoundException ex) {
+            Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
     protected class ThreadAceitaConexoes implements Runnable {
