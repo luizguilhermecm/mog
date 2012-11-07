@@ -28,7 +28,7 @@ import java.util.logging.Logger;
 public class MogP2PController {
     
     //Diretório mogShared
-    private final String mogShare = "D:\\mogShared";
+    private final String mogShare = "mogShare";
     
     //Defines de tipos de mensagem do protocolo
     private final String MSG_ENTR = "ENTR"; //mensagem solicitando participação na rede P2P
@@ -277,18 +277,28 @@ public class MogP2PController {
             //Construir tabela para envio
             ArrayList<String> tbresp = new ArrayList<String>();
             //Pegando um peer da tabela primária
-            String peer1 = peerspesq.get(cont1);
-            if(peer1 != null){
-                tbresp.add(peer1);
-                int pri_tab_size = peerspesq.size();
-                cont1 = (++cont1)%pri_tab_size;//da próxima vez, outro peer será enviado
+            if( (cont1+1) <= peerspesq.size() ) {
+                String peer1 = peerspesq.get(cont1);
+                if( peer1.equals(ipremet) ) {
+                    cont1 = (++cont1)%(peerspesq.size());
+                    peer1 = peerspesq.get(cont1);
+                }
+                if( !peer1.equals(ipremet) ) {
+                    tbresp.add(peer1);
+                    cont1 = (++cont1)%(peerspesq.size());//da próxima vez, outro peer será enviado
+                }
             }
             //Pegando um peer da tabela secundária
-            String peer2 = peers_reached.get(cont2);
-            if(peer2 != null){
-                tbresp.add(peer2);
-                int sec_tab_size = peers_reached.size();
-                cont2 = (++cont2)%sec_tab_size;//da próxima vez, outro peer será enviado
+            if( (cont2+1) <= peers_reached.size() ) {
+                String peer2 = peers_reached.get(cont2);
+                if( peer2.equals(ipremet) ) {
+                    cont2 = (++cont2)%peers_reached.size();
+                    peer2 = peers_reached.get(cont2);
+                }
+                if( !peer2.equals(ipremet) ) {
+                    tbresp.add(peer2);
+                    cont2 = (++cont2)%peers_reached.size();//da próxima vez, outro peer será enviado
+                }
             }
             //TODO: se a tabela de resposta chegar ao peer remoto com tamanho 
             //menor do que o máximo, o IP do peer que a enviou deverá constar 
