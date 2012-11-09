@@ -1,32 +1,62 @@
+REQUISITOS INICIAIS
+
 -	Todo peer tem duas tabelas de endereços: uma primária e uma secundária. 
 	A tabela primária fornece endereços de peers aos quais podem ser 
 	emitidas mensagens de pesquisa. A tabela secundária armazena endereços 
-	de peers que originaram alguma pesquisa que atingiu o peer local.
-	
+	de peers que originaram alguma mensagem que atingiu o peer local.
+
 -	O peer funciona recebendo requisições tipo ENTRADA de algum peer que 
 	quer entrar na rede e requisições do tipo PESQUISA de qualquer peer 
 	já existente.
-	
--	Ao receber uma requisição do tipo ENTRADA, um peer envia ao 
+
+-	Ao receber uma requisição do tipo ENTRADA, o peer local envia ao 
 	requisitante uma pequena tabela de endereços de peers. O tamanho da
 	tabela enviada tem limite X. O requisitante usará esses endereços 
 	para fazer suas pesquisas (ou seja, esses endereços serão armazenados 
-	na tabela primária do peer requisitante). 
-	
+	na tabela primária do peer requisitante). A estratégia de montagem 
+	da tabela de resposta é copiar um intervalo com tamanho X/2 da tabela
+	primária e outro com mesmo tamanho da tabela secundária. Cada 
+	intervalo obtido para uma resposta deve sobrepor uma linha do 
+	obtido para uma resposta imediatamente anterior (respectivo à tabela 
+	sendo consultada - primária ou secundária).
+
 -	A requisição do tipo ENTRADA faz com que o recebedor armazene o 
-	endereço do requisitante em sua tabela secundária de endereços.
-	
+	endereço do requisitante em alguma de suas tabelas de endereços.
+
 -	A primeira atividade que a aplicação realiza ao iniciar é enviar uma 
 	requisição do tipo ENTRADA a um (e apenas um) endereço pré-conhecido 
 	de peer vivo na rede. Se não tiver resposta, o peer se considera vivo, 
 	porém único na rede (o que não faz diferença no seu funcionamento).
-	
+
 -	Ao receber uma requisição do tipo PESQUISA(NOME), o peer verifica se 
-	o item buscado existe no diretório mogShare. Se sim, adquire o 
-	endereço do requisitante, estabelece uma conexão (socket) e faz um 
-	ping para o endereço, enviando logo em seguida o tempo de resposta 
-	através de uma mensagem do tipo EXISTE(NOME). Se não, verifica em qual 
-	nível da hierarquia de busca encontra-se essa requisição. Se o nível 
-	se encontra dentro do limite (exclusivo) da aplicação (3 por padrão), 
-	incrementa o valor do nível e encaminha a requisição para todos os 
-	peers em sua tabela primária. Se não, não processa mais a requisição.
+	o item buscado existe no diretório mogShare. Se sim, estabelece uma 
+	conexão (socket) e envia uma mensagem do tipo EXISTE(NOME) ao peer 
+	que gerou a pesquisa. Em seguida, espera uma solicitação de ping do 
+	mesmo peer, respondendo-a após o recebimento e encerrando o socket 
+	criado. Se não, verifica em qual nível da hierarquia de busca 
+	encontra-se essa requisição. Se o nível se encontra dentro do limite 
+	(exclusivo) da aplicação (3 por padrão), incrementa o valor do nível 
+	e encaminha a requisição para todos os peers em sua tabela primária.
+	Se não, não processa mais a requisição.
+	
+REQUISITOS APONTADOS PELO SAKURAY
+
+-	A tabela primária deve trocar linhas com a tabela secundária 
+	de acordo com um sistema de pontuação para cada linha (usado nas duas
+	tabelas). A pontuação ocorre quando um peer remoto responde
+	positivamente a uma pesquisa. Mesmo que esse peer não seja eleito para
+	o download do arquivo, ele acumula pontos para ser promovido à tabela
+	primária (caso esteja na secundária) ou para se manter lá (caso já
+	esteja). Se um peer usado para pesquisas responde positivamente muito 
+	pouco, ele perde prioridade e será substituído pelo primeiro que 
+	superá-lo.
+
+-	Após uma resposta de EXISTE(NOME), cada ping feito entre dois 
+	peers deve realizar uma transferência de arquivo com Y bytes. O peer 
+	que originou a pesquisa deve armazenar a taxa de transferência em uma
+	lista de respostas. A cálculo da taxa é dado como
+		Y/t
+	onde t é o tempo de ping. O peer associado à menor taxa será eleito 
+	para o download do arquivo.
+
+-	
