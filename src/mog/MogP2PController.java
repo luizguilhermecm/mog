@@ -28,7 +28,7 @@ import java.util.logging.Logger;
 public class MogP2PController {
     
     //Diretório mogShared
-    private final String mogShare = "\\mogShare\\";
+    private final String mogShare = "mogShare\\";
     
     //Defines de tipos de mensagem do protocolo
     private final String MSG_ENTR = "ENTR"; //mensagem solicitando participação na rede P2P
@@ -60,7 +60,7 @@ public class MogP2PController {
     private final int mog_port = 12345;
     
     //Defines de intervalos do protocolo (em milissegundos)
-    private final long tempoComResposta = 2;
+    private final long tempoComResposta = 4000;
     private final long tempoSemResposta = 1000;
     private final long mogTime = 1000; //intervalo de tempo entre cada ping.
     
@@ -170,7 +170,7 @@ public class MogP2PController {
             enviarMsg(MSG_PESQ, peer, termobusca, null);
         }
         
-        System.out.println("Envou mensagem para todos da lista");
+        System.out.println("Enviou mensagem para todos da lista");
         
         //Adicionando essa pesquisa ao mapa de pesquisas
         synchronized(pesquisas_ativas){
@@ -184,7 +184,9 @@ public class MogP2PController {
 
         //Aguardando tempoComResposta milissegundos
         try {Thread.sleep(tempoComResposta);} catch(Exception e) {}
-
+        
+        System.out.println("Expirou tempoComResposta");
+        
         ArrayList<PingsListNode> pings_list;
         synchronized(pesquisas_ativas){
             //Obtendo a lista de pings para os peers que responderam à pesquisa.
@@ -201,13 +203,18 @@ public class MogP2PController {
         //Solicitando download de arquivo para o peer com menor ping disponível
         boolean baixado = false;
         for (PingsListNode node:pings_list){
+            System.out.println("Consultando primeiro da lista de pings");
             if(!baixado){
                 try {
+                    
+                    try {Thread.sleep(1500);} catch(Exception e) {}
+                    
                     //Criando socket com o peer eleito
                     Socket socket = new Socket(node.host_ip, mog_port);
                     //Obtendo o buffer de saída
                     /**OutputStream out = node.out;/**/
                     OutputStream out = socket.getOutputStream();
+                    System.out.println("Enviando MSG_DOWN para "+node.host_ip);
                     //Enviando mensagem BAIXAR
                     enviarMsg(MSG_DOWN, null, termobusca, out);
                     //Obtendo buffer de entrada
@@ -217,6 +224,7 @@ public class MogP2PController {
                     BufferedReader br = new BufferedReader(new InputStreamReader(in));
                     //Recebendo o tamanho do array de bytes
                     String l = br.readLine();
+                    System.out.println("l = "+l);
                     int len = Integer.parseInt(l);
                     //Criando buffer de leitura de bytes
                     DataInputStream dis = new DataInputStream(in);
@@ -284,9 +292,13 @@ public class MogP2PController {
         if(!peerspesq.contains(remet)){
             if(!peers_reached.contains(remet)){
                 /*Mudar isso depois!!!*/
-                peerspesq.add(remet);
+                if ( peerspesq.size() < tam_tabela_prim ) {
+                    peerspesq.add(remet);
+                }
+                else {
+                    peers_reached.add(remet);
+                }
                 /**/
-                peers_reached.add(remet);
             }
         }
         
@@ -413,7 +425,7 @@ public class MogP2PController {
             BufferedReader br = new BufferedReader(new InputStreamReader(s_in));
             System.out.println("Recebeu MSG_PING");
             try {br.readLine();}
-            catch(Exception e) {return;}//Exceção: o socket provavelmente foi fechado no outro peer
+            catch (Exception e) {return;}//Exceção: o socket provavelmente foi fechado no outro peer
             //Enviar MSG_PING como resposta
             System.out.println("Enviando MSG_PING");
             enviarMsg(MSG_PING, null, ARQ_NULO, s_out);
@@ -431,7 +443,10 @@ public class MogP2PController {
             try{
                 //Carregando o arquivo
                 File arquivo = null;
-                carregarArquivo( nomearq.trim(), arquivo);
+                
+                //carregarArquivo( nomearq.trim(), arquivo);
+                arquivo = new File( mogShare+nomearq.trim() );
+                
                 //Serializando o arquivo
                 byte[] fba = new byte[ (int) arquivo.length() ];
                 BufferedInputStream bis =
@@ -467,13 +482,16 @@ public class MogP2PController {
             //Guardar resultado do ping em uma lista (ordenar essa lista posteriormente)
             synchronized (pesquisas_ativas) {
                 ArrayList pings_pesquisa = pesquisas_ativas.get(nomearq);
+                pings_pesquisa = pesquisas_ativas.get( nomearq.trim() );
                 if(pings_pesquisa == null){//Se nao encontrou essa pesquisa, tempoComResposta já expirou
+                    System.out.println("Resposta MSG_EXST tardia");
                     return;
                 }
                 Long ping_time = timefnish-timestart;
                 PingsListNode node = 
                         new PingsListNode(remet, ping_time/**, socket, in, out/**/);
                 pings_pesquisa.add(node);
+                System.out.println("Tamanho de "+nomearq+"pings_list: "+pings_pesquisa.size() );
             }
         }
         else if(tipomsg.
@@ -522,14 +540,9 @@ public class MogP2PController {
     }
     
     /*Verifica se um arquivo existe em mogShare*/
-    private boolean verificarArquivo(String nome){
+    private boolean verificarArquivo(String nome) {
         File file = new File(mogShare+nome);
-        if( !file.exists() ){
-            return false;
-        }
-        else{
-            return true;
-        }
+        return file.exists();
     }
     
     private void carregarArquivo(String nome, File arquivo){
