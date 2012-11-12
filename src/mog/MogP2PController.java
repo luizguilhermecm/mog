@@ -62,7 +62,7 @@ public class MogP2PController {
     //Defines de intervalos do protocolo (em milissegundos)
     private final long tempoComResposta = 4000;
     private final long tempoSemResposta = 1000;
-    private final long mogTime = 1000; //intervalo de tempo entre cada ping.
+    private final long mogTime = 20000; //intervalo de tempo entre cada ping.
     
     private final int ttl_inicial = 3;
     
@@ -96,7 +96,7 @@ public class MogP2PController {
         this.peer_inicial = peer_inicial;
     }
     
-    public void iniciar(){
+    public void iniciar() {
         System.out.println("Entrou em iniciar()");
         
         boolean exit = false;
@@ -577,6 +577,9 @@ public class MogP2PController {
     protected boolean ping(String peer) {
         try {
             Socket s = enviarMsg(MSG_PING, peer, ARQ_NULO, null);
+            if ( s == null ) {
+                return false;
+            }
             InputStream in = s.getInputStream();
             BufferedReader br = new BufferedReader( new InputStreamReader(in) );
             Thread.sleep(500);
@@ -623,7 +626,12 @@ public class MogP2PController {
                     //Dedicando uma thread separada para a comunicação
                     new Thread(new ThreadRecebeMsg(socket)).start();
                 }
-                catch(Exception e) {}
+                catch (IOException ex) {
+                    System.err.println("ERRO: nao foi possivel registrar-se na "
+                            + "porta " +mog_port +"ou nao foi possivel recuperar"
+                            + "uma conexão a partir dela.");
+                    Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
+                }
             }
         }
         
