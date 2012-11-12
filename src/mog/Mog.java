@@ -1,8 +1,15 @@
 package mog;
 
 import java.awt.event.KeyEvent;
-import javax.swing.JTextArea;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.swing.JTextField;
+import net.contentobjects.jnotify.JNotify;
+import net.contentobjects.jnotify.JNotifyException;
+import net.contentobjects.jnotify.JNotifyListener;
 
 public class Mog extends javax.swing.JFrame {
 
@@ -174,16 +181,90 @@ public class Mog extends javax.swing.JFrame {
         java.awt.EventQueue.invokeLater(new Runnable() {
             @Override
             public void run() {
-                mogP2PController = new MogP2PController();
-                mogP2PController.iniciar();
-                
-                new Mog().setVisible(true);
+                new Mog().iniciar();
             }
         });
     }
     
     //Minha declaração de variáveis
-    static MogP2PController mogP2PController = null;
+    final MogP2PController mogP2PController = new MogP2PController();
+    int watchID;
+    
+    //Minha declaração de métodos
+    private void iniciar() {
+        File f = new File(MogP2PController.mogShare);
+        String path = null;
+        try {
+            path = f.getCanonicalFile().getAbsolutePath();
+        } catch (IOException ex) {
+            Logger.getLogger(Mog.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        System.out.println(path);
+        atualizarLista();
+        /**/
+        int mask = JNotify.FILE_ANY;
+        boolean watchSubtree = true;
+        try {
+            watchID = JNotify.addWatch(
+                    path, 
+                    mask, 
+                    watchSubtree,
+                    new JNotifyListener() {
+
+                @Override
+                public void fileCreated(int i, String string, String string1) {
+                    atualizarLista();
+                }
+
+                @Override
+                public void fileDeleted(int i, String string, String string1) {
+                    atualizarLista();
+                }
+
+                @Override
+                public void fileModified(int i, String string, String string1) {
+                    atualizarLista();
+                }
+
+                @Override
+                public void fileRenamed(int i, String string, String string1, String string2) {
+                    atualizarLista();
+                }
+            } );
+        } catch (JNotifyException ex) {
+            Logger.getLogger(Mog.class.getName()).log(Level.SEVERE, null, ex);
+            return;
+        }
+        
+        mogP2PController.iniciar();
+        
+        this.setVisible(true);
+        /**/
+    }
+    
+    private void atualizarLista() {
+        File folder = new File(MogP2PController.mogShare);
+        @SuppressWarnings("MismatchedReadAndWriteOfArray")
+        File[] listOfFiles = folder.listFiles();
+        int flist_length = listOfFiles.length;
+        final ArrayList<String> strings = new ArrayList<String>();
+        for (int i=0; i<flist_length; i++) {
+            if ( listOfFiles[i].isFile() ) {
+                strings.add( listOfFiles[i].getName() );
+            }
+        }
+        jList1.setModel(new javax.swing.AbstractListModel() {
+            ArrayList<String> str = new ArrayList<String>(strings);
+            @Override
+            public int getSize() {
+                return str.size();
+            }
+            @Override
+            public Object getElementAt(int i) {
+                return str.get(i);
+            }
+        });
+    }
     
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton jButton2;

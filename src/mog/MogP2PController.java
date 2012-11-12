@@ -28,7 +28,7 @@ import java.util.logging.Logger;
 public class MogP2PController {
     
     //Diretório mogShared
-    private final String mogShare = "mogShare\\";
+    public static final String mogShare = "mogShare\\";
     
     //Defines de tipos de mensagem do protocolo
     private final String MSG_ENTR = "ENTR"; //mensagem solicitando participação na rede P2P

@@ -71,4 +71,9 @@
     nbproject/build-impl.xml file. 
 
     -->
+    <target name='-post-compile'>
+        <copy todir="${dist.dir}/lib">
+            <fileset dir="jnotify-lib-0.93/native_lib" />
+        </copy>
+    </target>
 </project>
