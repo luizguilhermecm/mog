@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.JTextField;
+import javax.swing.ListModel;
 import net.contentobjects.jnotify.JNotify;
 import net.contentobjects.jnotify.JNotifyException;
 import net.contentobjects.jnotify.JNotifyListener;
@@ -138,14 +139,24 @@ public class Mog extends javax.swing.JFrame {
     }//GEN-LAST:event_jButton3ActionPerformed
 
     private void jTextField1KeyPressed(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_jTextField1KeyPressed
-        // TODO add your handling code here:
+        
         int key = evt.getKeyCode();
         if( key == KeyEvent.VK_ENTER ){
+            ArrayList<String> al = new ArrayList<String>();
+            ListModel lm = jList1.getModel();
+            int lsize = lm.getSize();
+            for (int i=0; i<lsize; i++) {
+                al.add( (String) lm.getElementAt(i) );
+            }
+            
             JTextField source = (JTextField) evt.getSource();
             String termobusca = source.getText();
             source.setText("");
-            if(mogP2PController != null){
+            if ( al.indexOf(termobusca) == -1 ) {
                 mogP2PController.pesquisar(termobusca);
+            }
+            else {
+                System.out.println( termobusca+" ja existe na lista" );
             }
         }
     }//GEN-LAST:event_jTextField1KeyPressed
