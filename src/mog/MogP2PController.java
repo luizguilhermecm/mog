@@ -28,7 +28,7 @@ import java.util.logging.Logger;
 public class MogP2PController {
     
     //Diretório mogShared
-    public static final String mogShare = "mogShare\\";
+    public static final String mogShare = "mogShare/";
     
     //Defines de tipos de mensagem do protocolo
     private final String MSG_ENTR = "ENTR"; //mensagem solicitando participação na rede P2P
@@ -81,7 +81,7 @@ public class MogP2PController {
     private int ctrl_sobrep = 1;
     
     //IP de um peer pré-conhecido
-    private String peer_inicial = "ARTHENCOU-PC";
+    private String peer_inicial = "ARTHENCOU-NOTE";
     
     //Tabela de pesquisas ativas
     private final HashMap<String,ArrayList<PingsListNode>> pesquisas_ativas = 
@@ -123,7 +123,7 @@ public class MogP2PController {
         /* TODO: filtrar melhor quais IPs nao posso incluir na tabela.
          * Por exemplo: não posso incluir meu próprio IP. */
         
-        //encerrando procedimento de inicialização caso não haja ninguém na rede
+        //interrompendo procedimento de inicialização caso não haja ninguém na rede
         if (exit) {
             return;
         }
@@ -238,7 +238,14 @@ public class MogP2PController {
                     String l = br.readLine();
                     System.out.println("l = "+l);
                     int len = Integer.parseInt(l);
-                    //Criando buffer de leitura de bytes
+                    
+                    //Dormindo um tempo até que todos os bytes cheguem
+                    /* TODO: aqui o tempo de sleep pode ser calculado com base
+                     * na taxa de transferência obtida para esse peer 
+                     * anteriormente */
+                    try {Thread.sleep(500);} catch (Exception e) {}
+                    
+                    //Criando stream de leitura de arquivo
                     DataInputStream dis = new DataInputStream(in);
                     //Recebendo o arquivo em um array de bytes de tamanho len
                     byte[] data = new byte[len];
@@ -418,8 +425,6 @@ public class MogP2PController {
                         //Enviando mensagem
                         System.out.println("Encaminhando MSG_PESQ para "+peer);
                         pw.println( tipomsg+nomearq+ipremet+(--ttl) );
-                        //Fechando stream de mensagem
-                        pw.close();
                         //Nota: não me preocupo em fechar o socket porque o outro peer já se encarrega disso
                     } catch (UnknownHostException ex) {
                         Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
@@ -469,18 +474,22 @@ public class MogP2PController {
             try{
                 //Carregando o arquivo
                 File arquivo = null;
-                
-                //carregarArquivo( nomearq.trim(), arquivo);
                 arquivo = new File( mogShare+nomearq.trim() );
-                
                 //Serializando o arquivo
                 byte[] fba = new byte[ (int) arquivo.length() ];
                 BufferedInputStream bis =
                         new BufferedInputStream(new FileInputStream(arquivo));
                 bis.read(fba, 0, fba.length);
+                bis.close();
                 //Informando o tamanho do vetor de bytes
                 PrintWriter pw = new PrintWriter(out, true);
                 pw.println(fba.length);
+                
+                //Dormindo um tempo para que o peer remoto receba o tamanho
+                try {Thread.sleep(100);} catch (Exception e) {}
+                //Limpando o buffer de saída
+                out.flush();
+                
                 //Criando buffer de saída de bytes
                 DataOutputStream dos = new DataOutputStream(out);
                 //Enviando o arquivo
@@ -500,7 +509,6 @@ public class MogP2PController {
                 //Aguardando alguma resposta
                 msg_in.readLine();
                 //Resposta recebida!
-                msg_in.close();
             } 
             catch(Exception e) {return;}
             long timefnish = System.currentTimeMillis();//Registra tempo de término
@@ -561,13 +569,7 @@ public class MogP2PController {
             msgbuffer_out.println(tipomsg+nomearq+EIP_NULO+ttl_inicial);
             /* Nota: é melhor não fechar o socket aqui pois isso gerará uma 
              * exceção no peer remoto, podendo impedir o processamento da mensagem.
-             * Ao terminar o processamento, o peer remoto fechará o socket.
-            /**
-            //fechando o socket criado
-            if(peerpesq_sckt != null){
-                try {peerpesq_sckt.close();} catch(Exception e) {}
-            }
-            /**/
+             * Ao terminar o processamento, o peer remoto fechará o socket. */
             return peerpesq_sckt;
         }
         catch(Exception e) {}
@@ -583,7 +585,9 @@ public class MogP2PController {
             InputStream in = s.getInputStream();
             BufferedReader br = new BufferedReader( new InputStreamReader(in) );
             Thread.sleep(500);
-            return br.ready();
+            boolean ret = br.ready();
+            br.close();
+            return ret;
         } catch (InterruptedException ex) {
             Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
         } catch (IOException ex) {
@@ -614,23 +618,28 @@ public class MogP2PController {
 
         @Override
         public void run() {
+            ServerSocket ssocket = null;
             while(true){
-                ServerSocket ssocket = null;
-                Socket socket = null;
                 try{
                     //Criando servidor de conexões
-                    ssocket = new ServerSocket(mog_port);
+                    if (ssocket == null) {
+                        ssocket = new ServerSocket(mog_port);
+                    }
                     //Aguardando nova conexão
-                    System.out.println("Esperando conexão");
-                    socket = ssocket.accept();
+                    System.out.println("Esperando conexao");
+                    Socket socket = ssocket.accept();
                     //Dedicando uma thread separada para a comunicação
                     new Thread(new ThreadRecebeMsg(socket)).start();
                 }
                 catch (IOException ex) {
+                    /**
+                    ssocket = null;
+                    /**/
                     System.err.println("ERRO: nao foi possivel registrar-se na "
-                            + "porta " +mog_port +"ou nao foi possivel recuperar"
-                            + "uma conexão a partir dela.");
+                            + "porta " +mog_port +" ou nao foi possivel "
+                            + "recuperar uma conexão a partir dela.");
                     Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
+                    /**/
                 }
             }
         }
@@ -666,12 +675,14 @@ public class MogP2PController {
                 //Processando mensagem recebida
                 MogP2PController.this.
                         processarMsgRec(mensagem, socket, in, out);
+                //Encerrando stream de entrada
+                msg_in.close();
             } catch (IOException ex) {
                 Logger.getLogger(MogP2PController.class.getName()).log(Level.SEVERE, null, ex);
                 System.out.println("Socket fechado na thread de recebimento de mensagem");
             }
             //Fechando o socket aberto pelo recebimento da mensagem
-            if(!socket.isClosed()){
+            if ( !socket.isClosed() ) {
                 try {socket.close();} catch(Exception e) {}
             }
         }
@@ -707,9 +718,17 @@ public class MogP2PController {
             if ( !ping(peer) ) {
                 synchronized(peerspesq) {
                     peerspesq.remove(peer);
+                    synchronized (peers_reached) {
+                        if ( peers_reached.size() > 0 ) {
+                            String change_peer = (String) peers_reached.get(0);
+                            peerspesq.add(change_peer);
+                            peers_reached.remove(0);
+                        }
+                    }
                 }
             }
         }
+        
     }
     
     protected class PingsListNode implements Comparable {
@@ -744,6 +763,21 @@ public class MogP2PController {
             return ping_time.compareTo(arg.ping_time);
         }
     }
+    
+    /**
+    protected class PeersListNode implements Comparable {
+        
+        public String peer;
+        public int pontuacao;
+
+        @Override
+        public int compareTo(Object t) {
+            throw new UnsupportedOperationException("Not supported yet.");
+        }
+        
+    }
+    /**/
+    
     /**
     protected class ThreadEnvioMsg implements Runnable {
         
