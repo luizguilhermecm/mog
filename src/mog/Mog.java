@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.swing.JDialog;
+import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.ListModel;
 import net.contentobjects.jnotify.JNotify;
@@ -249,7 +251,21 @@ public class Mog extends javax.swing.JFrame {
         
         mogP2PController.iniciar();
         
+        JDialog list1 = new JDialog();
+        list1.setTitle("Lista 1");
+        JScrollPane sp1 = new JScrollPane( mogP2PController.getJList1() );
+        list1.add( sp1 );
+        list1.setSize(300, 300);
+        
+        JDialog list2 = new JDialog();
+        list2.setTitle("Lista 2");
+        JScrollPane sp2 = new JScrollPane( mogP2PController.getJList2() );
+        list2.add( sp2 );
+        list2.setSize(300, 300);
+        
         this.setVisible(true);
+        list1.setVisible(true);
+        list2.setVisible(true);
         /**/
     }
     
