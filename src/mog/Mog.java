@@ -14,15 +14,37 @@ import net.contentobjects.jnotify.JNotify;
 import net.contentobjects.jnotify.JNotifyException;
 import net.contentobjects.jnotify.JNotifyListener;
 
-public class Mog extends javax.swing.JFrame {
+import javax.sound.sampled.*;
+import javax.swing.JDialog;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.ListModel;
 
+public class Mog extends javax.swing.JFrame {
+    
+    private File soundFile;
+    private AudioInputStream audioIn;
+    private javax.sound.sampled.Clip clip;
+    private int tamanho;
+    private int e_play = 0;
+    private double instanteDaMusica;
     /**
      * Creates new form Main
      */
     public Mog() {
         initComponents();
     }
-
+    
+    public class Atualizador implements Runnable{
+        @Override
+        public void run() {
+            while(jSlider1.getValue() != tamanho)
+            {
+                //System.out.println(jSlider1.getValue());
+                jSlider1.setValue(Integer.parseInt(String.valueOf(clip.getMicrosecondPosition()).toString()));
+            }
+        }
+    }
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
@@ -39,9 +61,9 @@ public class Mog extends javax.swing.JFrame {
         jList1 = new javax.swing.JList();
         jButton2 = new javax.swing.JButton();
         jButton3 = new javax.swing.JButton();
-        jButton4 = new javax.swing.JButton();
         jLabel2 = new javax.swing.JLabel();
         jTextField1 = new javax.swing.JTextField();
+        jSlider1 = new javax.swing.JSlider();
 
         jFormattedTextField1.setText("jFormattedTextField1");
 
@@ -57,15 +79,23 @@ public class Mog extends javax.swing.JFrame {
         jScrollPane1.setViewportView(jList1);
 
         jButton2.setText("Play");
+        jButton2.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                jButton2MouseClicked(evt);
+            }
+        });
 
-        jButton3.setText("Previous");
+        jButton3.setText("Stop");
+        jButton3.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                jButton3MouseClicked(evt);
+            }
+        });
         jButton3.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jButton3ActionPerformed(evt);
             }
         });
-
-        jButton4.setText("Next");
 
         jLabel2.setText("Adicionar um arquivo (digite o nome exato):");
 
@@ -75,27 +105,39 @@ public class Mog extends javax.swing.JFrame {
             }
         });
 
+        jSlider1.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            public void mouseDragged(java.awt.event.MouseEvent evt) {
+                jSlider1MouseDragged(evt);
+            }
+        });
+
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
         jPanel1Layout.setHorizontalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel1Layout.createSequentialGroup()
-                .addContainerGap()
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.TRAILING)
-                    .addComponent(jTextField1)
                     .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addContainerGap()
                         .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(jTextField1)
                             .addGroup(jPanel1Layout.createSequentialGroup()
+                                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                    .addComponent(jLabel2)
+                                    .addComponent(jLabel1))
+                                .addGap(0, 0, Short.MAX_VALUE))))
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
+                        .addGap(0, 6, Short.MAX_VALUE)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 443, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
                                 .addComponent(jButton2)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jButton3)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jButton4))
-                            .addComponent(jLabel2)
-                            .addComponent(jLabel1))
-                        .addGap(0, 0, Short.MAX_VALUE)))
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                                .addComponent(jButton3)))))
                 .addContainerGap())
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
+                .addGap(0, 0, Short.MAX_VALUE)
+                .addComponent(jSlider1, javax.swing.GroupLayout.PREFERRED_SIZE, 449, javax.swing.GroupLayout.PREFERRED_SIZE))
         );
         jPanel1Layout.setVerticalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -103,12 +145,13 @@ public class Mog extends javax.swing.JFrame {
                 .addContainerGap()
                 .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 14, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 324, Short.MAX_VALUE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 303, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(17, 17, 17)
+                .addComponent(jSlider1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 10, Short.MAX_VALUE)
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jButton2)
-                    .addComponent(jButton3)
-                    .addComponent(jButton4))
+                    .addComponent(jButton3))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 14, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
@@ -120,28 +163,21 @@ public class Mog extends javax.swing.JFrame {
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addGroup(layout.createSequentialGroup()
+                .addContainerGap()
                 .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap())
+                .addContainerGap(8, Short.MAX_VALUE))
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addContainerGap())
+            .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
         );
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
-    private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton3ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jButton3ActionPerformed
-
     private void jTextField1KeyPressed(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_jTextField1KeyPressed
-        
+
         int key = evt.getKeyCode();
         if( key == KeyEvent.VK_ENTER ){
             ArrayList<String> al = new ArrayList<String>();
@@ -150,7 +186,7 @@ public class Mog extends javax.swing.JFrame {
             for (int i=0; i<lsize; i++) {
                 al.add( (String) lm.getElementAt(i) );
             }
-            
+
             JTextField source = (JTextField) evt.getSource();
             String termobusca = source.getText();
             source.setText("");
@@ -163,10 +199,68 @@ public class Mog extends javax.swing.JFrame {
         }
     }//GEN-LAST:event_jTextField1KeyPressed
 
+    private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton3ActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_jButton3ActionPerformed
+
+    private void jButton3MouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_jButton3MouseClicked
+        e_play = 0;
+        clip.stop();
+        jButton2.setLabel("Play");
+        clip.setMicrosecondPosition(0);
+        jSlider1.setValue(0);
+    }//GEN-LAST:event_jButton3MouseClicked
+
+    private void jButton2MouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_jButton2MouseClicked
+try
+        {
+            
+            if(e_play == 0)
+            {
+                jSlider1.setValue(0);
+                soundFile = new File("mogShare/"+jList1.getSelectedValue());
+                audioIn = AudioSystem.getAudioInputStream(soundFile);
+                
+                clip = AudioSystem.getClip();
+                clip.stop();
+                clip.open(audioIn);
+                tamanho = Integer.parseInt(String.valueOf(clip.getMicrosecondLength()).toString());
+                jSlider1.setMaximum(tamanho);
+                clip.setMicrosecondPosition(0);
+                clip.start();
+                jButton2.setLabel("Pause");
+                new Thread(new Atualizador()).start();
+                e_play = 1;
+            }
+            else if(e_play == 1)
+            {
+                instanteDaMusica = clip.getMicrosecondPosition();
+                jButton2.setLabel("Play");
+                e_play = 2;
+                clip.stop();
+            }
+            else if(e_play == 2)
+            {
+                clip.setMicrosecondPosition((long) instanteDaMusica);
+                clip.start();
+                jButton2.setLabel("Pause");
+                e_play = 1;
+            }
+        }
+        catch(Exception e)
+        {
+            
+        }
+    }//GEN-LAST:event_jButton2MouseClicked
+
+    private void jSlider1MouseDragged(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_jSlider1MouseDragged
+        clip.setMicrosecondPosition(jSlider1.getValue());
+    }//GEN-LAST:event_jSlider1MouseDragged
+
     /**
      * @param args the command line arguments
      */
-    public static void main(String args[]) {
+    public static void main(final String args[]) {
         /* Set the Nimbus look and feel */
         //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
         /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
@@ -194,17 +288,20 @@ public class Mog extends javax.swing.JFrame {
         java.awt.EventQueue.invokeLater(new Runnable() {
             @Override
             public void run() {
-                new Mog().iniciar();
+                new Mog().iniciar(args.length==1?args[0]:null);
             }
         });
     }
     
     //Minha declaração de variáveis
-    final MogP2PController mogP2PController = new MogP2PController();
+    MogP2PController mogP2PController;
     int watchID;
     
     //Minha declaração de métodos
-    private void iniciar() {
+    private void iniciar(String arg) {
+        
+        mogP2PController = new MogP2PController(arg);
+        
         File f = new File(MogP2PController.mogShare);
         String path = null;
         try {
@@ -256,12 +353,14 @@ public class Mog extends javax.swing.JFrame {
         JScrollPane sp1 = new JScrollPane( mogP2PController.getJList1() );
         list1.add( sp1 );
         list1.setSize(300, 300);
+        list1.setLocation(this.getWidth(), 0);
         
         JDialog list2 = new JDialog();
         list2.setTitle("Lista 2");
         JScrollPane sp2 = new JScrollPane( mogP2PController.getJList2() );
         list2.add( sp2 );
         list2.setSize(300, 300);
+        list2.setLocation(this.getWidth()+300, 0);
         
         this.setVisible(true);
         list1.setVisible(true);
@@ -296,13 +395,13 @@ public class Mog extends javax.swing.JFrame {
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton jButton2;
     private javax.swing.JButton jButton3;
-    private javax.swing.JButton jButton4;
     private javax.swing.JFormattedTextField jFormattedTextField1;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JList jList1;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JSlider jSlider1;
     private javax.swing.JTextField jTextField1;
     // End of variables declaration//GEN-END:variables
 }
